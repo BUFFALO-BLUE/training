@@ -1,0 +1,22 @@
+# Data and model artifacts -- tracked by DVC, not git directly
+training_table.csv
+training_table.parquet
+models/
+*.csv
+!fold_metrics*.csv
+!arima_series_detail*.csv
+!prophet_series_detail*.csv
+
+# DVC internals
+/.dvc/cache
+/.dvc/tmp
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# OS/editor
+.DS_Store
+.vscode/

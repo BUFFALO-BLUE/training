@@ -1,0 +1,45 @@
+name: DVC Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  reproduce:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Authenticate DVC with DagsHub
+        run: |
+          dvc remote modify origin --local auth basic
+          dvc remote modify origin --local user ${{ secrets.DAGSHUB_USERNAME }}
+          dvc remote modify origin --local password ${{ secrets.DAGSHUB_TOKEN }}
+
+      - name: Pull DVC-tracked data
+        run: dvc pull
+
+      - name: Reproduce pipeline
+        run: dvc repro
+
+      - name: Show metrics
+        run: dvc metrics show
+
+      - name: Compare metrics against main
+        if: github.event_name == 'pull_request'
+        run: dvc metrics diff main
+
+      - name: Show plots diff
+        if: github.event_name == 'pull_request'
+        run: dvc plots diff main

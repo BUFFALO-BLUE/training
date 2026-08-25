@@ -1,0 +1,10 @@
+pandas
+numpy
+lightgbm
+pmdarima
+prophet
+joblib
+pyyaml
+pyarrow
+dvc
+dvc[s3]

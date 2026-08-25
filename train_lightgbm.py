@@ -87,12 +87,19 @@ def train_all_folds(params: dict):
         train_set = lgb.Dataset(X_train, label=y_train, categorical_feature=cat_cols, free_raw_data=False)
         val_set = lgb.Dataset(X_val, label=y_val, categorical_feature=cat_cols, reference=train_set, free_raw_data=False)
 
+        # Newer LightGBM (4.x+) removed the standalone `fobj` argument from
+        # train(). A custom objective is now set as params['objective']
+        # itself (a callable), the same slot that would otherwise hold a
+        # string like 'regression'. feval is unaffected and still passed
+        # separately.
+        fold_lgb_params = dict(lgb_params)
+        fold_lgb_params["objective"] = lambda p, d: asymmetric_mse_objective(p, d, alpha)
+
         booster = lgb.train(
-            lgb_params,
+            fold_lgb_params,
             train_set,
             num_boost_round=params["training"]["num_boost_round"],
             valid_sets=[val_set],
-            fobj=lambda p, d: asymmetric_mse_objective(p, d, alpha),
             feval=lambda p, d: asymmetric_mse_eval(p, d, alpha),
             callbacks=[lgb.early_stopping(stopping_rounds=params["training"]["early_stopping_rounds"], verbose=False)],
         )

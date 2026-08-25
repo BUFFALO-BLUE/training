@@ -24,8 +24,8 @@ jobs:
       - name: Authenticate DVC with DagsHub
         run: |
           dvc remote modify origin --local auth basic
-          dvc remote modify origin --local user ${{ secrets.DAGSHUB_USERNAME }}
-          dvc remote modify origin --local password ${{ secrets.DAGSHUB_TOKEN }}
+          dvc remote modify origin --local user BUFFALO-BLUE
+          dvc remote modify origin --local password 2300b832318a76aa2537ca284e8881da76ca9333
 
       - name: Pull DVC-tracked data
         run: dvc pull

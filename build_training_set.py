@@ -5,8 +5,8 @@ import time
 import numpy as np
 import pandas as pd
 
-DAILY_PATH = r"C:\Users\Musarah\Downloads\training\merged_data.csv"
-MASTER_PATH = r"C:\Users\Musarah\Downloads\training\master_store_family_dataset.csv"
+DAILY_PATH = "/workspaces/training/data/merged_data.csv"
+MASTER_PATH = "/workspaces/training/data/master_store_family_dataset.csv"
 
 MASTER_DROP_COLS = [
     "wape_D", "wape_W", "wape_ME",

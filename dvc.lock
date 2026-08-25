@@ -1,0 +1,22 @@
+schema: '2.0'
+stages:
+  build_data:
+    cmd: python build_training_set.py
+    deps:
+    - path: build_training_set.py
+      hash: md5
+      md5: f216d13503c35cbf7ff025ae91985e61
+      size: 10972
+    - path: data/master_store_family_dataset.csv
+      hash: md5
+      md5: 525b49384eca91eed312d11a22e9d968
+      size: 657468
+    - path: data/merged_data.csv
+      hash: md5
+      md5: 0ee1af2469b687d39e6a9837c11ae8eb
+      size: 227439557
+    outs:
+    - path: training_table.parquet
+      hash: md5
+      md5: 41dccc1bd7a8b99835cdae8395f4e9fe
+      size: 106435612

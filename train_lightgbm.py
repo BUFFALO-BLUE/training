@@ -23,7 +23,7 @@ import lightgbm as lgb
 import yaml
 
 from build_training_set import load_training_table, walk_forward_splits
-from asof_features import build_asof_features, prophet_seasonality_asof
+from asof_features import build_asof_features, prophet_seasonality_asof, seasonality_proxies_asof
 
 TARGET = "sales"
 
@@ -43,7 +43,10 @@ LEAKY_STATIC_COLS = [
     "hier_cluster", "volume_cluster", "nested_cluster", "sparse_cluster",
 ]
 
-ASOF_CATEGORICAL_COLS = ["sales_status_asof", "demand_pattern_asof", "volume_tier_asof", "hier_cluster_asof"]
+ASOF_CATEGORICAL_COLS = [
+    "sales_status_asof", "demand_pattern_asof", "volume_tier_asof",
+    "hier_cluster_asof", "volume_cluster_asof", "nested_cluster_asof", "sparse_cluster_asof",
+]
 
 
 def load_params(path: str = "params.yaml") -> dict:
@@ -105,17 +108,33 @@ def train_all_folds(params: dict):
 
     splits = walk_forward_splits(table["date"], n_splits=n_splits, horizon=horizon, gap=gap)
 
-    # Prophet seasonality is expensive (~1-3 sec per series fit, ~1,700
-    # eligible series = ~30-90 minutes for ONE cutoff). All 5 folds' train
-    # windows end within `horizon * n_splits` = 75 days of each other, so
-    # compute it ONCE at the EARLIEST fold's cutoff (most conservative --
-    # can't leak into any later fold either) and reuse across all folds.
-    earliest_asof_date = pd.Timestamp(splits[0][0][-1])
-    print(f"Computing Prophet seasonality once, as of {earliest_asof_date.date()} "
-          f"(reused across all {len(splits)} folds -- see asof_features.py docstring)")
+    seasonality_method = params["lightgbm"].get("seasonality_method", "cheap")
     daily_full = table[["store_nbr", "family", "date", "sales"]]
-    daily_for_prophet = daily_full.loc[daily_full["date"] <= earliest_asof_date]
-    shared_seasonality = prophet_seasonality_asof(daily_for_prophet)
+
+    if seasonality_method == "prophet":
+        # Faithful but SLOW: fits ~1,700 individual Prophet models
+        # sequentially. Expect 30-90 minutes (see asof_features.py
+        # docstring), plus a possible one-time multi-minute cmdstan
+        # compile on the very first Prophet fit in a fresh environment --
+        # both can look like a hang if you're watching a buffered/quiet
+        # terminal. Run this with `python -u` (already set in dvc.yaml)
+        # and expect a long, mostly-silent wait -- that's normal, not stuck.
+        earliest_asof_date = pd.Timestamp(splits[0][0][-1])
+        print(f"Computing Prophet seasonality once, as of {earliest_asof_date.date()} "
+              f"(reused across all {len(splits)} folds -- this can take 30-90 minutes, "
+              f"see asof_features.py docstring)")
+        daily_for_prophet = daily_full.loc[daily_full["date"] <= earliest_asof_date]
+        shared_seasonality = prophet_seasonality_asof(daily_for_prophet)
+    else:
+        # Fast, vectorized proxy -- seconds, not minutes. Good default for
+        # iterating on the pipeline; switch params.yaml's
+        # lightgbm.seasonality_method to "prophet" for a final, more
+        # accurate run once everything else is confirmed working.
+        print("Using cheap vectorized seasonality proxy (set lightgbm.seasonality_method: "
+              "'prophet' in params.yaml for the slower, more accurate version)")
+        earliest_asof_date = pd.Timestamp(splits[0][0][-1])
+        daily_for_seasonality = daily_full.loc[daily_full["date"] <= earliest_asof_date]
+        shared_seasonality = seasonality_proxies_asof(daily_for_seasonality)
 
     fold_records = []
 

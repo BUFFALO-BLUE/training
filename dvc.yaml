@@ -1,6 +1,6 @@
 stages:
   build_data:
-    cmd: python build_training_set.py
+    cmd: python -u build_training_set.py
     deps:
       - build_training_set.py
       - data/merged_data.csv
@@ -9,7 +9,7 @@ stages:
       - training_table.parquet   # falls back to training_table.csv if pyarrow isn't installed
 
   train:
-    cmd: python train_lightgbm.py
+    cmd: python -u train_lightgbm.py
     deps:
       - train_lightgbm.py
       - asof_features.py
@@ -33,7 +33,7 @@ stages:
           cache: false
 
   train_arima:
-    cmd: python train_arima.py
+    cmd: python -u train_arima.py
     deps:
       - train_arima.py
       - build_training_set.py
@@ -53,7 +53,7 @@ stages:
           cache: false
 
   train_prophet:
-    cmd: python train_prophet.py
+    cmd: python -u train_prophet.py
     deps:
       - train_prophet.py
       - build_training_set.py
@@ -73,7 +73,7 @@ stages:
           cache: false
 
   train_prophet_representative:
-    cmd: python train_prophet_representative.py
+    cmd: python -u train_prophet_representative.py
     deps:
       - train_prophet_representative.py
       - build_training_set.py
@@ -93,7 +93,7 @@ stages:
           cache: false
 
   train_sarima_cluster:
-    cmd: python train_sarima_by_cluster.py
+    cmd: python -u train_sarima_by_cluster.py
     deps:
       - train_sarima_by_cluster.py
       - build_training_set.py

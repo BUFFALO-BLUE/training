@@ -33,25 +33,7 @@ stages:
           cache: false
 
 
-  train_prophet:
-    cmd: python -u train_prophet.py
-    deps:
-      - train_prophet.py
-      - build_training_set.py
-      - training_table.parquet
-    params:
-      - params.yaml:
-          - asymmetric_loss
-          - walk_forward
-          - prophet
-    metrics:
-      - metrics_prophet.json:
-          cache: false
-    plots:
-      - fold_metrics_prophet.csv:
-          x: fold
-          y: val_asymmetric_mse
-          cache: false
+
 
   train_prophet_representative:
     cmd: python -u train_prophet_representative.py

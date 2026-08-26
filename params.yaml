@@ -19,18 +19,7 @@ training:
   num_boost_round: 2000
   early_stopping_rounds: 50
 
-arima:
-  # NOTE: seasonal: true + seasonal_period below means this is already
-  # fitting SARIMA (auto_arima searches seasonal (P,D,Q,m) orders too,
-  # not just non-seasonal (p,d,q)) -- the name "arima" here is just the
-  # filename/legacy label, not a statement that seasonality is off.
-  n_jobs: -1
-  min_train_days: 60
-  seasonal: true
-  seasonal_period: 7
-  max_p: 5
-  max_q: 5
-  max_d: 2
+
 
 sarima_cluster:
   n_jobs: -1

@@ -32,25 +32,6 @@ stages:
           y: val_asymmetric_mse
           cache: false
 
-  train_arima:
-    cmd: python -u train_arima.py
-    deps:
-      - train_arima.py
-      - build_training_set.py
-      - training_table.parquet
-    params:
-      - params.yaml:
-          - asymmetric_loss
-          - walk_forward
-          - arima
-    metrics:
-      - metrics_arima.json:
-          cache: false
-    plots:
-      - fold_metrics_arima.csv:
-          x: fold
-          y: val_asymmetric_mse
-          cache: false
 
   train_prophet:
     cmd: python -u train_prophet.py

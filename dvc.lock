@@ -69,8 +69,8 @@ stages:
       size: 128
     - path: models/
       hash: md5
-      md5: aca573305a2610dd9f34fc6203af11ee.dir
-      size: 3486362
+      md5: a867fe462abb8fcd2f6798df2c707e17.dir
+      size: 3486360
       nfiles: 5
   train_prophet_representative:
     cmd: python -u train_prophet_representative.py
@@ -89,25 +89,10 @@ stages:
       size: 106435612
     params:
       params.yaml:
-        asymmetric_loss:
-          alpha: 2.0
-        prophet_representative:
-          cluster_column: hier_cluster
-          n_per_cluster: 2
-          selection_features:
-          - average_demand
-          - CV2_weekly_nonzero
-          - ADI_weekly
-          - weekly_seasonality_strength
-          - annual_seasonality_strength
-          min_train_days: 60
-          weekly_seasonality: true
-          yearly_seasonality: true
-          changepoint_prior_scale: 0.05
-        walk_forward:
-          n_splits: 5
-          horizon: 15
-          gap: 0
+        prophet_representative.changepoint_prior_scale: 0.05
+        prophet_representative.min_train_days: 60
+        prophet_representative.weekly_seasonality: true
+        prophet_representative.yearly_seasonality: true
     outs:
     - path: fold_metrics_prophet_representative.csv
       hash: md5
@@ -134,26 +119,9 @@ stages:
       size: 106435612
     params:
       params.yaml:
-        asymmetric_loss:
-          alpha: 2.0
-        sarima_cluster:
-          n_jobs: -1
-          min_train_days: 60
-          cluster_column: hier_cluster
-          use_exogenous: true
-          seasonal: true
-          seasonal_period: 7
-          max_p: 5
-          max_q: 5
-          max_d: 2
-          max_P: 2
-          max_Q: 2
-          max_D: 1
-          information_criterion: aic
-        walk_forward:
-          n_splits: 5
-          horizon: 15
-          gap: 0
+        sarima_cluster.information_criterion: aic
+        sarima_cluster.min_train_days: 60
+        sarima_cluster.seasonal_period: 7
     outs:
     - path: fold_metrics_sarima_cluster.csv
       hash: md5

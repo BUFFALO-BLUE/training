@@ -36,12 +36,6 @@ sarima_cluster:
   max_D: 1
   information_criterion: aic      # or 'bic' -- bic penalizes complexity more, aic is the pmdarima default
 
-prophet:
-  n_jobs: -1
-  min_train_days: 60
-  weekly_seasonality: true
-  yearly_seasonality: true
-  changepoint_prior_scale: 0.05   # default; raise if series show more trend shifts than Prophet is capturing
 
 prophet_representative:
   cluster_column: hier_cluster       # which clustering defines the ~10 "typical series" to study

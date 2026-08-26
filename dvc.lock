@@ -72,3 +72,94 @@ stages:
       md5: aca573305a2610dd9f34fc6203af11ee.dir
       size: 3486362
       nfiles: 5
+  train_prophet_representative:
+    cmd: python -u train_prophet_representative.py
+    deps:
+    - path: build_training_set.py
+      hash: md5
+      md5: f216d13503c35cbf7ff025ae91985e61
+      size: 10972
+    - path: train_prophet_representative.py
+      hash: md5
+      md5: 150949268c533db45eadc4980fb2bb6f
+      size: 7780
+    - path: training_table.parquet
+      hash: md5
+      md5: 41dccc1bd7a8b99835cdae8395f4e9fe
+      size: 106435612
+    params:
+      params.yaml:
+        asymmetric_loss:
+          alpha: 2.0
+        prophet_representative:
+          cluster_column: hier_cluster
+          n_per_cluster: 2
+          selection_features:
+          - average_demand
+          - CV2_weekly_nonzero
+          - ADI_weekly
+          - weekly_seasonality_strength
+          - annual_seasonality_strength
+          min_train_days: 60
+          weekly_seasonality: true
+          yearly_seasonality: true
+          changepoint_prior_scale: 0.05
+        walk_forward:
+          n_splits: 5
+          horizon: 15
+          gap: 0
+    outs:
+    - path: fold_metrics_prophet_representative.csv
+      hash: md5
+      md5: 4c47ba6751defa4e0534698b270021bf
+      size: 590
+    - path: metrics_prophet_representative.json
+      hash: md5
+      md5: 1eb87a80d6436c5b0d2aa2081db3938e
+      size: 240
+  train_sarima_cluster:
+    cmd: python -u train_sarima_by_cluster.py
+    deps:
+    - path: build_training_set.py
+      hash: md5
+      md5: f216d13503c35cbf7ff025ae91985e61
+      size: 10972
+    - path: train_sarima_by_cluster.py
+      hash: md5
+      md5: 327bb916a01fdd7666a9badb6f166b1a
+      size: 7392
+    - path: training_table.parquet
+      hash: md5
+      md5: 41dccc1bd7a8b99835cdae8395f4e9fe
+      size: 106435612
+    params:
+      params.yaml:
+        asymmetric_loss:
+          alpha: 2.0
+        sarima_cluster:
+          n_jobs: -1
+          min_train_days: 60
+          cluster_column: hier_cluster
+          use_exogenous: true
+          seasonal: true
+          seasonal_period: 7
+          max_p: 5
+          max_q: 5
+          max_d: 2
+          max_P: 2
+          max_Q: 2
+          max_D: 1
+          information_criterion: aic
+        walk_forward:
+          n_splits: 5
+          horizon: 15
+          gap: 0
+    outs:
+    - path: fold_metrics_sarima_cluster.csv
+      hash: md5
+      md5: c4f2947c83ee17facf1bc8c96ac4a35b
+      size: 618
+    - path: metrics_sarima_cluster.json
+      hash: md5
+      md5: b5833a93f34233f566abed0e3a45eb21
+      size: 222

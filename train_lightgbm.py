@@ -17,6 +17,7 @@ production, where you don't have tomorrow's data when forecasting tomorrow.
 
 import json
 import os
+import gc
 import numpy as np
 import pandas as pd
 import lightgbm as lgb
@@ -27,7 +28,7 @@ from asof_features import build_asof_features, prophet_seasonality_asof, seasona
 
 TARGET = "sales"
 
-NON_FEATURE_COLS = ["id", "date", TARGET]
+NON_FEATURE_COLS = ["id", "date", TARGET, "asof_date"]
 
 # Computed once over the FULL window in the master CSV -> leaks the future.
 # Excluded here; fold-specific *_asof replacements are attached in the loop.
@@ -106,6 +107,13 @@ def train_all_folds(params: dict):
     print("Loading merged training table...")
     table = load_training_table()
 
+    # Drop the leaky static columns immediately -- they're excluded from
+    # features later anyway (LEAKY_STATIC_COLS), but were sitting in memory
+    # unused for the entire run otherwise. Real savings on a memory-
+    # constrained machine (~25% of this table's memory footprint).
+    present_leaky_cols = [c for c in LEAKY_STATIC_COLS if c in table.columns]
+    table = table.drop(columns=present_leaky_cols)
+
     splits = walk_forward_splits(table["date"], n_splits=n_splits, horizon=horizon, gap=gap)
 
     seasonality_method = params["lightgbm"].get("seasonality_method", "cheap")
@@ -152,8 +160,15 @@ def train_all_folds(params: dict):
         feature_cols = get_feature_columns(train_df)
         cat_cols = get_categorical_columns(train_df, feature_cols)
 
-        X_train, y_train = train_df[feature_cols], train_df[TARGET]
-        X_val, y_val = val_df[feature_cols], val_df[TARGET]
+        # Slim to only the columns actually needed before building the
+        # LightGBM Dataset -- train_df/val_df still carry every original
+        # column (including ones dropped from feature_cols) up to this
+        # point, which is wasted memory on an expanding-window fold where
+        # train_df can already be nearly the full table's size.
+        X_train, y_train = train_df[feature_cols].copy(), train_df[TARGET].copy()
+        X_val, y_val = val_df[feature_cols].copy(), val_df[TARGET].copy()
+        del train_df, val_df
+        gc.collect()
 
         train_set = lgb.Dataset(X_train, label=y_train, categorical_feature=cat_cols, free_raw_data=False)
         val_set = lgb.Dataset(X_val, label=y_val, categorical_feature=cat_cols, reference=train_set, free_raw_data=False)
@@ -187,6 +202,14 @@ def train_all_folds(params: dict):
             "val_asymmetric_mse": val_score,
         })
         print(f"Fold {fold_idx}: val_asymmetric_mse = {val_score:.4f} (best_iter={booster.best_iteration})")
+
+        # Explicit cleanup before the next fold -- don't rely on CPython's
+        # refcounting/GC timing alone when working this close to a memory
+        # ceiling. train_set/val_set were built with free_raw_data=False
+        # (needed so booster.predict/feval can still see X_val above), so
+        # they hold real references that are worth dropping deliberately.
+        del X_train, y_train, X_val, y_val, train_set, val_set, booster
+        gc.collect()
 
     fold_df = pd.DataFrame(fold_records)
     fold_df.to_csv("fold_metrics.csv", index=False)

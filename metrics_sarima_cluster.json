@@ -1,0 +1,9 @@
+{
+  "model_type": "sarima_by_cluster",
+  "cluster_column": "hier_cluster",
+  "n_clusters": 6,
+  "mean_val_asymmetric_mse": 2284464640.733764,
+  "std_val_asymmetric_mse": 1885165698.0775826,
+  "alpha": 2.0,
+  "n_folds": 5
+}

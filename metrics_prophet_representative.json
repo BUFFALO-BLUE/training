@@ -1,0 +1,9 @@
+{
+  "model_type": "prophet_representative",
+  "cluster_column": "hier_cluster",
+  "n_representative_series": 8,
+  "mean_val_asymmetric_mse": 6933.8199466157475,
+  "std_val_asymmetric_mse": 9241.744989103108,
+  "alpha": 2.0,
+  "n_folds": 5
+}

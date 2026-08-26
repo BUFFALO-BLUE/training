@@ -47,7 +47,7 @@ SEASONALITY: two implementations are provided.
 
 import numpy as np
 import pandas as pd
-from sklearn.cluster import AgglomerativeClustering
+from sklearn.cluster import AgglomerativeClustering, KMeans
 from sklearn.preprocessing import StandardScaler
 
 # Same thresholds as the original seasonality_strength.py
@@ -177,6 +177,85 @@ def prophet_seasonality_asof(
     return pd.DataFrame(rows)
 
 
+def build_volume_and_nested_cluster_asof(feat: pd.DataFrame) -> pd.DataFrame:
+    """
+    Asof-safe reconstruction of volume_cluster (k=3 on volume, SUFFICIENT_SALES
+    rows only) and nested_cluster (sub-cluster k=2 within each volume tier on
+    CV2/ADI/seasonality). Sentinel-coded exactly like hier_cluster_asof:
+    "NO_SALES" / "INSUFFICIENT_DATA" for ineligible rows.
+
+    SIMPLIFICATION vs. the original: the original chose k=3 for volume and
+    k=2-3 per sub-group via silhouette search over the full dataset, once.
+    Re-running that search 5x (once per fold) is expensive and the resulting
+    k could differ fold to fold, making cross-fold results harder to reason
+    about. This version fixes k=3 (volume) and k=2 (each nested sub-group)
+    with a fixed random_state for determinism -- a reasonable fold-to-fold
+    stable choice, not a re-derived optimum each time. Revisit if fold-level
+    silhouette scores suggest a fixed k is a poor fit for a given fold.
+    """
+    feat = feat.copy()
+    feat["volume_cluster_asof"] = feat["sales_status_asof"].map(
+        lambda s: "NO_SALES" if s == "NO_SALES" else "INSUFFICIENT_DATA"
+    )
+    feat["nested_cluster_asof"] = feat["volume_cluster_asof"]
+
+    eligible = feat[feat["sales_status_asof"] == "SUFFICIENT_SALES"].dropna(subset=["average_demand_asof"]).copy()
+    if len(eligible) < 6:
+        return feat
+
+    vol_scaled = StandardScaler().fit_transform(np.log1p(eligible[["average_demand_asof"]]))
+    k_vol = min(3, len(eligible) - 1)
+    eligible["volume_cluster_asof"] = KMeans(n_clusters=k_vol, n_init=10, random_state=42) \
+        .fit_predict(vol_scaled).astype(str)
+
+    subfeat_cols = ["CV2_weekly_nonzero_asof", "ADI_weekly_asof",
+                     "weekly_seasonality_strength_asof", "annual_seasonality_strength_asof"]
+    nested = pd.Series(index=eligible.index, dtype=object)
+    for vlabel, group in eligible.groupby("volume_cluster_asof"):
+        sub = group.dropna(subset=subfeat_cols)
+        if len(sub) >= 4:
+            sub_scaled = StandardScaler().fit_transform(sub[subfeat_cols])
+            k_sub = min(2, len(sub) - 1)
+            sub_labels = KMeans(n_clusters=k_sub, n_init=10, random_state=42).fit_predict(sub_scaled)
+            nested.loc[sub.index] = [f"{vlabel}_{l}" for l in sub_labels]
+        missing_idx = group.index.difference(sub.index)
+        nested.loc[missing_idx] = f"{vlabel}_NA"  # not enough clean data to sub-cluster this row
+    eligible["nested_cluster_asof"] = nested
+
+    feat.loc[eligible.index, "volume_cluster_asof"] = eligible["volume_cluster_asof"]
+    feat.loc[eligible.index, "nested_cluster_asof"] = eligible["nested_cluster_asof"]
+    return feat
+
+
+def build_sparse_cluster_asof(feat: pd.DataFrame) -> pd.DataFrame:
+    """
+    Asof-safe reconstruction of sparse_cluster: sub-types the LOW_SALES /
+    VERY_LOW_SALES tail (asof-defined) into up to 3 groups (slow-seller /
+    long-dormant / likely-new-product, mirroring the original's sparse_0/1/2
+    story) using average_demand_asof, pct_zero_days_asof, and
+    days_of_history_asof. NO_SALES rows get "NO_SALES" (all-zero vectors,
+    nothing to cluster); SUFFICIENT_SALES rows get "NOT_APPLICABLE".
+    """
+    feat = feat.copy()
+    feat["sparse_cluster_asof"] = feat["sales_status_asof"].map(
+        lambda s: "NO_SALES" if s == "NO_SALES"
+        else ("NOT_APPLICABLE" if s == "SUFFICIENT_SALES" else "INSUFFICIENT_DATA")
+    )
+
+    subfeat_cols = ["average_demand_asof", "pct_zero_days_asof", "days_of_history_asof"]
+    sparse_rows = feat[feat["sales_status_asof"].isin(["LOW_SALES", "VERY_LOW_SALES"])].dropna(subset=subfeat_cols)
+    if len(sparse_rows) < 6:
+        return feat
+
+    X = sparse_rows[subfeat_cols].copy()
+    X["average_demand_asof"] = np.log1p(X["average_demand_asof"])
+    X_scaled = StandardScaler().fit_transform(X)
+    k = min(3, len(sparse_rows) - 1)
+    labels = KMeans(n_clusters=k, n_init=10, random_state=42).fit_predict(X_scaled)
+    feat.loc[sparse_rows.index, "sparse_cluster_asof"] = [f"sparse_{l}" for l in labels]
+    return feat
+
+
 def build_asof_features(
     daily: pd.DataFrame,
     asof_date: pd.Timestamp,
@@ -203,6 +282,18 @@ def build_asof_features(
     base["n_nonzero_days_asof"] = base["n_obs_asof"] - base["zero_days_asof"]  # count of days
     base["pct_zero_days_asof"] = base["zero_days_asof"] / base["n_obs_asof"]  # unitless fraction, 0-1
     base["cv_asof"] = base["std_demand_asof"] / base["average_demand_asof"].replace(0, np.nan)  # unitless
+
+    # days_of_history_asof: days elapsed since this series' first nonzero
+    # sale, through asof_date -- NaN if the series has never sold as of
+    # this cutoff. Needed for sparse_cluster_asof sub-typing below.
+    first_nonzero = (
+        daily_asof.loc[daily_asof["sales"] > 0]
+        .groupby(["store_nbr", "family"])["date"].min()
+        .rename("first_nonzero_date_asof")
+        .reset_index()
+    )
+    base = base.merge(first_nonzero, on=["store_nbr", "family"], how="left")
+    base["days_of_history_asof"] = (asof_date - base["first_nonzero_date_asof"]).dt.days + 1
 
     wk = _weekly_adi_cv2(daily_asof)
 
@@ -275,7 +366,14 @@ def build_asof_features(
         feat.loc[eligible.index, "hier_cluster_asof"] = eligible["hier_cluster_asof"]
 
     feat["asof_date"] = asof_date
-    return feat.drop(columns=["n_obs_asof", "zero_days_asof", "total_volume_asof", "cum_pct"], errors="ignore")
+
+    feat = build_volume_and_nested_cluster_asof(feat)
+    feat = build_sparse_cluster_asof(feat)
+
+    return feat.drop(
+        columns=["n_obs_asof", "zero_days_asof", "total_volume_asof", "cum_pct", "first_nonzero_date_asof"],
+        errors="ignore",
+    )
 
 
 def attach_asof_features(rows: pd.DataFrame, daily: pd.DataFrame, asof_date: pd.Timestamp,
